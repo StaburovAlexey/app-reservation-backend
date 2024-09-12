@@ -40,7 +40,11 @@ app.get("/users", (req, res) => {
     res.status(200).json(docs);
   });
 });
-
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Разрешить только для этого источника
+  })
+);
 // Запускаем сервер
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
