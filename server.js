@@ -87,7 +87,31 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+// Эндпоинт для получения всех пользователей (требуется авторизация)
+app.get("/users", authenticateToken, (req, res) => {
+  usersDb.find({}, (err, docs) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(200).json(docs);
+  });
+});
+// Эндпоинт для проверки валидности токена
+app.post("/validate-token", (req, res) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1]; // Извлекаем токен из заголовка
 
+  if (!token) {
+    return res.status(401).json({ message: "Token is missing" });
+  }
+
+  jwt.verify(token, SECRET_KEY, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+    res.status(200).json({ message: "Token is valid" });
+  });
+});
 // Эндпоинт для добавления резервации (требуется авторизация)
 app.post("/reserve", authenticateToken, (req, res) => {
   const { userId, date, time, service } = req.body;
