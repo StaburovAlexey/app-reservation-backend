@@ -2,12 +2,12 @@ const express = require("express");
 const cors = require("cors");
 const Datastore = require("nedb");
 const jwt = require("jsonwebtoken");
-const cookieParser = require('cookie-parser');
+const cookieParser = require("cookie-parser");
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = "your_jwt_secret"; // секрет для токенов
 const REFRESH_SECRET = "your_refresh_secret"; // секрет для refresh токенов
-const allowedOrigins = ['http://localhost:5173'];
+const allowedOrigins = ["http://localhost:5173"];
 // Инициализация базы данных
 const usersDb = new Datastore({ filename: "./users.db", autoload: true });
 const reservesDb = new Datastore({ filename: "./reserves.db", autoload: true });
@@ -47,7 +47,7 @@ const generateTokens = (user) => {
   const token = jwt.sign(
     { _id: user._id, login: user.login, role: user.role },
     JWT_SECRET,
-    { expiresIn: "30s" }
+    { expiresIn: "30m" }
   );
   const refreshToken = jwt.sign(
     { _id: user._id, login: user.login, role: user.role },
@@ -114,6 +114,7 @@ app.post("/login", (req, res) => {
       httpOnly: true,
       secure: true, // Установите true, если вы используете HTTPS
       maxAge: 7 * 24 * 60 * 60 * 1000, // Время жизни cookie (7 дней)
+      // maxAge: 10 * 1000, // Время жизни cookie (10 секунд)
       sameSite: "None",
     });
 
@@ -138,9 +139,8 @@ app.get("/users", authenticateToken, (req, res) => {
 
 // Маршрут для обновления токена
 app.post("/refresh-token", (req, res) => {
-  console.log("куки", req.cookies);
   const refreshToken = req.cookies.refreshToken; // Извлекаем refresh token из HTTP-only cookie
-
+console.log('refreshToken = ', refreshToken);
   if (!refreshToken) {
     return res.status(401).json({ message: "Refresh token is required" });
   }
@@ -159,12 +159,14 @@ app.post("/refresh-token", (req, res) => {
     };
     const tokens = generateTokens(user);
 
-    // Устанавливаем новый Refresh Token в HTTP-only cookie
-    res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Установите true, если вы используете HTTPS
-      maxAge: 7 * 24 * 60 * 60 * 1000, // Время жизни cookie (7 дней)
-    });
+    // Устанавливаем Refresh Token в HTTP-only cookie
+    // res.cookie("refreshToken", tokens.refreshToken, {
+    //   httpOnly: true,
+    //   secure: true, // Установите true, если вы используете HTTPS
+    //   maxAge: 7 * 24 * 60 * 60 * 1000, // Время жизни cookie (7 дней)
+    //   // maxAge: 40 * 1000, // Время жизни cookie (40 секунд)
+    //   sameSite: "None",
+    // });
 
     res.status(200).json({ token: tokens.token });
   });
@@ -172,4 +174,3 @@ app.post("/refresh-token", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
