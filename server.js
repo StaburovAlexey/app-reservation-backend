@@ -1,141 +1,141 @@
 const express = require("express");
 const cors = require("cors");
 const Datastore = require("nedb");
-const path = require("path");
 const jwt = require("jsonwebtoken");
 
 const app = express();
-const port = 3000;
-const SECRET_KEY = "your_secret_key"; // Задайте секретный ключ для подписи JWT
+const PORT = 3000;
+const JWT_SECRET = "your_jwt_secret"; // секрет для токенов
+const REFRESH_SECRET = "your_refresh_secret"; // секрет для refresh токенов
 
-// Подключение к двум базам данных
-const usersDb = new Datastore({
-  filename: path.join(__dirname, "users.db"),
-  autoload: true,
-});
+// Инициализация базы данных
+const usersDb = new Datastore({ filename: "./users.db", autoload: true });
+const reservesDb = new Datastore({ filename: "./reserves.db", autoload: true });
 
-const reservesDb = new Datastore({
-  filename: path.join(__dirname, "reserves.db"),
-  autoload: true,
-});
+app.use(cors());
+app.use(express.json()); // Для парсинга JSON тела запросов
 
-// Middleware для обработки CORS
-app.use(
-  cors({
-    origin: "http://localhost:5173", // Разрешить только для этого источника
-  })
-);
-
-// Middleware для обработки JSON
-app.use(express.json());
-
-// Эндпоинт для создания пользователя
-app.post("/users", (req, res) => {
-  const { mail, password } = req.body;
-  const user = { mail, password };
-
-  usersDb.insert(user, (err, newDoc) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(201).json(newDoc);
-  });
-});
-
-// Эндпоинт для поиска пользователя по mail и password и получения токена
-app.post("/users/login", (req, res) => {
-  const { mail, password } = req.body;
-
-  usersDb.findOne({ mail, password }, (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Генерируем JWT токен с сроком действия 3 часа
-    const token = jwt.sign({ userId: user._id, mail: user.mail }, SECRET_KEY, {
-      expiresIn: "3h", // Токен будет действовать 3 часа
-    });
-
-    res.status(200).json({
-      token,
-      user: {
-        id: user._id,
-        mail: user.mail,
-        role: user.role,
-      },
-    });
-  });
-});
-
-// Middleware для проверки токена авторизации
+// Middleware для проверки токена
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1]; // Ожидается, что токен передается в формате "Bearer token"
 
   if (!token) {
-    return res.status(401).json({ message: "Token is missing" });
+    return res.status(401).json({ message: "Token is required" });
   }
 
-  jwt.verify(token, SECRET_KEY, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ message: "Invalid token" });
+      return res.status(403).json({ message: "Invalid or expired token" });
     }
-    req.user = user;
+    req.user = user; // Добавляем данные пользователя в запрос
     next();
   });
 };
-// Эндпоинт для получения всех пользователей (требуется авторизация)
-app.get("/users", authenticateToken, (req, res) => {
-  usersDb.find({}, (err, docs) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(200).json(docs);
-  });
-});
-// Эндпоинт для проверки валидности токена
-app.post("/validate-token", (req, res) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Извлекаем токен из заголовка
 
-  if (!token) {
-    return res.status(401).json({ message: "Token is missing" });
+// Функция для генерации токенов
+const generateTokens = (user) => {
+  const token = jwt.sign(
+    { _id: user._id, login: user.login, role: user.role },
+    JWT_SECRET,
+    { expiresIn: "15m" }
+  );
+  const refreshToken = jwt.sign(
+    { _id: user._id, login: user.login, role: user.role },
+    REFRESH_SECRET,
+    {
+      expiresIn: "7d",
+    }
+  );
+  return { token, refreshToken };
+};
+
+// Маршрут для регистрации пользователя
+app.post("/register", (req, res) => {
+  const { login, password, role } = req.body;
+
+  if (!login || !password || !role) {
+    return res
+      .status(400)
+      .json({ message: "Username and password are required" });
   }
 
-  jwt.verify(token, SECRET_KEY, (err, decoded) => {
+  // Проверяем, существует ли уже пользователь
+  usersDb.findOne({ login }, (err, existingUser) => {
     if (err) {
-      return res.status(403).json({ message: "Invalid token" });
+      return res
+        .status(500)
+        .json({ message: "Error checking for existing user" });
     }
-    res.status(200).json({ message: "Token is valid" });
-  });
-});
-// Эндпоинт для добавления резервации (требуется авторизация)
-app.post("/reserve", authenticateToken, (req, res) => {
-  const { userId, date, time, service } = req.body;
-  const reserve = { userId, date, time, service };
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
-  reservesDb.insert(reserve, (err, newDoc) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(201).json(newDoc);
-  });
-});
+    const newUser = { login, password, role };
 
-// Эндпоинт для получения всех резерваций (требуется авторизация)
-app.get("/reserves", authenticateToken, (req, res) => {
-  reservesDb.find({}, (err, docs) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(200).json(docs);
+    usersDb.insert(newUser, (err, user) => {
+      if (err) {
+        return res.status(500).json({ message: "Error registering user" });
+      }
+      res.status(201).json({ user });
+    });
   });
 });
 
-// Запускаем сервер
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+// Маршрут для авторизации пользователя (login)
+app.post("/login", (req, res) => {
+  const { login, password } = req.body;
+
+  if (!login || !password) {
+    return res.status(400).json({ message: "Логин и пароль обязательны!" });
+  }
+
+  usersDb.findOne({ login, password }, (err, user) => {
+    if (err) {
+      return res.status(500).json({ message: "Error logging in" });
+    }
+    if (!user) {
+      return res.status(401).json({ message: "Неверный логин или пароль" });
+    }
+
+    const tokens = generateTokens(user);
+    res.status(200).json({ user, tokens });
+  });
+});
+
+// Маршрут для получения всех пользователей
+app.get("/users", authenticateToken, (req, res) => {
+  usersDb.find({}, (err, users) => {
+    if (err) {
+      return res.status(500).json({ message: "Error fetching users" });
+    }
+    res.status(200).json(users);
+  });
+});
+
+// Маршрут для обновления токена
+app.post("/refresh-token", (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ message: "Refresh token is required" });
+  }
+
+  jwt.verify(refreshToken, REFRESH_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+    const user = {
+      _id: decoded._id,
+      login: decoded.login,
+      role: decoded.role,
+
+    };
+    const tokens = generateTokens(user);
+    res.status(200).json(tokens);
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
