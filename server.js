@@ -26,7 +26,10 @@ const authenticateToken = (req, res, next) => {
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ message: "Invalid or expired token" });
+      if (err.name === "TokenExpiredError") {
+        return res.status(403).json({ message: "Токен истек" });
+      }
+      return res.status(403).json({ message: "Неверный токен" });
     }
     req.user = user; // Добавляем данные пользователя в запрос
     next();
@@ -38,7 +41,7 @@ const generateTokens = (user) => {
   const token = jwt.sign(
     { _id: user._id, login: user.login, role: user.role },
     JWT_SECRET,
-    { expiresIn: "15m" }
+    { expiresIn: "30s" }
   );
   const refreshToken = jwt.sign(
     { _id: user._id, login: user.login, role: user.role },
@@ -123,13 +126,15 @@ app.post("/refresh-token", (req, res) => {
 
   jwt.verify(refreshToken, REFRESH_SECRET, (err, decoded) => {
     if (err) {
-      return res.status(403).json({ message: "Invalid refresh token" });
+      if (err.name === "TokenExpiredError") {
+        return res.status(403).json({ message: "Refresh токен истек" });
+      }
+      return res.status(403).json({ message: "Неверный refresh токен" });
     }
     const user = {
       _id: decoded._id,
       login: decoded.login,
       role: decoded.role,
-
     };
     const tokens = generateTokens(user);
     res.status(200).json(tokens);
