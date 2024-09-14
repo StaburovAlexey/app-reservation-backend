@@ -2,17 +2,23 @@ const express = require("express");
 const cors = require("cors");
 const Datastore = require("nedb");
 const jwt = require("jsonwebtoken");
-
+const cookieParser = require('cookie-parser');
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = "your_jwt_secret"; // секрет для токенов
 const REFRESH_SECRET = "your_refresh_secret"; // секрет для refresh токенов
-
+const allowedOrigins = ['http://localhost:5173'];
 // Инициализация базы данных
 const usersDb = new Datastore({ filename: "./users.db", autoload: true });
 const reservesDb = new Datastore({ filename: "./reserves.db", autoload: true });
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173", // URL вашего клиента
+    credentials: true, // Позволяет отправлять cookies и другие учетные данные
+  })
+);
+app.use(cookieParser()); // Подключаем cookie-parser
 app.use(express.json()); // Для парсинга JSON тела запросов
 
 // Middleware для проверки токена
@@ -102,8 +108,22 @@ app.post("/login", (req, res) => {
     }
 
     const tokens = generateTokens(user);
-    res.status(200).json({ user, tokens });
+
+    // Устанавливаем Refresh Token в HTTP-only cookie
+    res.cookie("refreshToken", tokens.refreshToken, {
+      httpOnly: true,
+      secure: true, // Установите true, если вы используете HTTPS
+      maxAge: 7 * 24 * 60 * 60 * 1000, // Время жизни cookie (7 дней)
+      sameSite: "None",
+    });
+
+    res.status(200).json({ user, token: tokens.token });
   });
+});
+// выход из системы
+app.post("/logout", (req, res) => {
+  res.clearCookie("refreshToken");
+  res.status(204).send(); // 204 No Content
 });
 
 // Маршрут для получения всех пользователей
@@ -118,10 +138,11 @@ app.get("/users", authenticateToken, (req, res) => {
 
 // Маршрут для обновления токена
 app.post("/refresh-token", (req, res) => {
-  const { refreshToken } = req.body;
+  console.log("куки", req.cookies);
+  const refreshToken = req.cookies.refreshToken; // Извлекаем refresh token из HTTP-only cookie
 
   if (!refreshToken) {
-    return res.status(400).json({ message: "Refresh token is required" });
+    return res.status(401).json({ message: "Refresh token is required" });
   }
 
   jwt.verify(refreshToken, REFRESH_SECRET, (err, decoded) => {
@@ -137,10 +158,18 @@ app.post("/refresh-token", (req, res) => {
       role: decoded.role,
     };
     const tokens = generateTokens(user);
-    res.status(200).json(tokens);
+
+    // Устанавливаем новый Refresh Token в HTTP-only cookie
+    res.cookie("refreshToken", tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Установите true, если вы используете HTTPS
+      maxAge: 7 * 24 * 60 * 60 * 1000, // Время жизни cookie (7 дней)
+    });
+
+    res.status(200).json({ token: tokens.token });
   });
 });
-
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
