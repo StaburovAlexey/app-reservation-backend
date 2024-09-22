@@ -96,7 +96,8 @@ const generateTokens = (user) => {
 
 // Маршрут для регистрации пользователя
 app.post("/register", checkAndRefreshToken, (req, res) => {
-  const { login, password, role } = req.body;
+  const user = req.body;
+  const { login, password, role } = user;
 
   if (!login || !password || !role) {
     return res
@@ -115,7 +116,7 @@ app.post("/register", checkAndRefreshToken, (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const newUser = { login, password, role };
+    const newUser = user;
 
     usersDb.insert(newUser, (err, user) => {
       if (err) {
