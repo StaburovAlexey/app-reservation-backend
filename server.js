@@ -113,7 +113,9 @@ app.post("/register", checkAndRefreshToken, (req, res) => {
         .json({ message: "Error checking for existing user" });
     }
     if (existingUser) {
-      return res.status(400).json({ message: "Пользователь с таким логином уже существует" });
+      return res
+        .status(400)
+        .json({ message: "Пользователь с таким логином уже существует" });
     }
 
     const newUser = user;
@@ -172,7 +174,26 @@ app.get("/users", checkAndRefreshToken, (req, res) => {
     res.status(200).json(users);
   });
 });
+// Маршрут для удаления пользователя
+app.delete("/users", checkAndRefreshToken, (req, res) => {
+  const { _id, login } = req.body;
 
+  if (!_id || !login) {
+    return res.status(400).json({ message: "User ID and login are required" });
+  }
+
+  // Находим и удаляем пользователя по _id и login
+  usersDb.remove({ _id, login }, {}, (err, numRemoved) => {
+    if (err) {
+      return res.status(500).json({ message: "Error deleting user" });
+    }
+    if (numRemoved === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ message: "User deleted successfully" });
+  });
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
