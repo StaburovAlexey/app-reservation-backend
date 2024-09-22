@@ -7,6 +7,7 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = "your_jwt_secret"; // секрет для токенов
 const REFRESH_SECRET = "your_refresh_secret"; // секрет для refresh токенов
+const { scheduleBackup } = require("./backup"); // Импортируем бэкап
 const allowedOrigins = ["http://localhost:5173"];
 // Инициализация базы данных
 const usersDb = new Datastore({ filename: "./users.db", autoload: true });
@@ -194,6 +195,10 @@ app.delete("/users", checkAndRefreshToken, (req, res) => {
     res.status(200).json({ message: "User deleted successfully" });
   });
 });
+
+//// Запускаем задачу для бэкапа каждые 30 секунд
+scheduleBackup();
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
