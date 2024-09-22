@@ -113,7 +113,7 @@ app.post("/register", checkAndRefreshToken, (req, res) => {
         .json({ message: "Error checking for existing user" });
     }
     if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({ message: "Пользователь с таким логином уже существует" });
     }
 
     const newUser = user;
