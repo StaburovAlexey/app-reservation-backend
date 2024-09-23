@@ -198,34 +198,30 @@ app.delete("/users", checkAndRefreshToken, (req, res) => {
 
 // Маршрут для редактирования пользователя
 app.put("/users", checkAndRefreshToken, (req, res) => {
-  const { _id, login, newLogin, newPassword, newRole } = req.body;
+  const { _id, login, password, role, name } = req.body;
 
-  if (!_id || !login) {
-    return res.status(400).json({ message: "User ID and login are required" });
+  if (!_id) {
+    return res.status(400).json({ message: "User ID are required" });
   }
 
   // Обновляемые данные
   const updatedData = {};
-  if (newLogin) updatedData.login = newLogin;
-  if (newPassword) updatedData.password = newPassword;
-  if (newRole) updatedData.role = newRole;
+  if (login) updatedData.login = login;
+  if (password) updatedData.password = password;
+  if (role) updatedData.role = role;
+  if (name) updatedData.name = name;
 
-  // Обновление пользователя по _id и login
-  usersDb.update(
-    { _id, login },
-    { $set: updatedData },
-    {},
-    (err, numUpdated) => {
-      if (err) {
-        return res.status(500).json({ message: "Error updating user" });
-      }
-      if (numUpdated === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      res.status(200).json({ message: "User updated successfully" });
+  // Обновление пользователя по _id
+  usersDb.update({ _id }, { $set: updatedData }, {}, (err, numUpdated) => {
+    if (err) {
+      return res.status(500).json({ message: "Error updating user" });
     }
-  );
+    if (numUpdated === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ message: "User updated successfully" });
+  });
 });
 //// Запускаем задачу для бэкапа каждые 30 секунд
 scheduleBackup();
